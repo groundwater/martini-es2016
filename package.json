@@ -1,0 +1,15 @@
+{
+  "name": "esplay",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "browserify": "^9.0.3",
+    "es6ify": "^1.6.0"
+  }
+}
