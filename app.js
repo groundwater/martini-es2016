@@ -32,8 +32,10 @@ class Server {
   // they might return promises, so you need to await them
   async putUsers(users) {
     let out = {}
-    for (let {id, user} of users) {
-      out[id] = await user
+    for (let body of users) {
+      let {id, user} = await body
+
+      out[id] = user
     }
     this.user = out
   }
@@ -93,8 +95,14 @@ client.putUser('bob', {fname: 'bob', lname: 'smith'})
 })
 .then(console.log)
 .then(ok => {
-  return putUsers(function*(){
-    yield {id: 'tom', user: {fname: 'carl', lname: 'bo'}}
+  return client.putUsers(function*(){
+
+    // can yield a promise
+    yield new Promise(done => {
+      done({id: 'tom', user: {fname: 'carl', lname: 'bo'}})
+    })
+
+    // or yield a value
     yield {id: 'jeff', user: {fname: 'jeff', lname: 'hare'}}
   })
 })
