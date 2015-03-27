@@ -13,6 +13,13 @@ class Server {
       yield {fname: 'rom'}
     }()
   }
+
+  async getUsers() {
+    return function*(){
+      yield {fname: 'ore'}
+      yield {fname: 'rom'}
+    }()
+  }
 }
 
 function* strToGen(_st){
@@ -78,13 +85,15 @@ class Client {
     this.port = port
     this.host = host
   }
+
   putUsers(gen) {
     let opt = {
       port: this.port,
       host: this.host,
       headers: {
         'Transfer-Encoding': 'chunked'
-      }
+      },
+      method: 'PUT'
     }
 
     var fin
@@ -98,6 +107,29 @@ class Client {
       fin = done
     })
   }
+
+  getUsers(props) {
+    let opt = {
+      port: this.port,
+      host: this.host,
+      headers: {
+        'Transfer-Encoding': 'chunked'
+      },
+      method: 'GET'
+    }
+
+    var fin
+    let req = http.request(opt, function(res){
+      fin(strToGen(res)) //2938
+    })
+
+    req.end()
+
+    return new Promise(done => {
+      fin = done
+    })
+  }
+
 }
 
 let sv = new Server()
@@ -105,8 +137,21 @@ var cl = new Client(8080, 'localhost')
 let st = new stream.PassThrough()
 
 var sr = http.createServer(function (req, res){
-  // console.log('req')
+  if (req.method === 'PUT')
   sv.putUsers(strToGen(req))
+    .then(function(gen){
+      // console.log('then')
+      res.statusCode = 200
+      str(gen).pipe(res)
+    })
+    .catch(function(e){
+      console.error(e)
+      console.error(e.stack)
+      res.statusCode = 500
+      res.end()
+    })
+  else if (req.method === 'GET')
+  sv.getUsers()
     .then(function(gen){
       // console.log('then')
       res.statusCode = 200
@@ -128,6 +173,15 @@ sr.listen(8080, function(){
   .then(async function(gen){
     for(var u of gen) {
       console.log('<', await u)
+    }
+  })
+  .then(ok => {
+    let names = []
+    return cl.getUsers(names)
+  })
+  .then(async function(gen) {
+    for (var u of gen) {
+      console.log('+', await u)
     }
   })
 })
