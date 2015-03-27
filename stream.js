@@ -1,6 +1,7 @@
 import http from 'http'
 import stream from 'stream'
 import split from 'split'
+import HttpApi from 'lib-http-api'
 
 class Server {
   async putUsers(gen) {
@@ -81,20 +82,12 @@ function str(gen) {
 }
 
 class Client {
-  constructor(port, host) {
-    this.port = port
-    this.host = host
+  constructor(api) {
+    this.api  = api
   }
 
   putUsers(gen) {
-    let opt = {
-      port: this.port,
-      host: this.host,
-      headers: {
-        'Transfer-Encoding': 'chunked'
-      },
-      method: 'PUT'
-    }
+    let opt = this.api.request('putUsers', {})
 
     var fin
     let req = http.request(opt, function(res){
@@ -109,15 +102,8 @@ class Client {
   }
 
   getUsers(props) {
-    let opt = {
-      port: this.port,
-      host: this.host,
-      headers: {
-        'Transfer-Encoding': 'chunked'
-      },
-      method: 'GET'
-    }
-
+    let opt = this.api.request('putUsers', {})
+    
     var fin
     let req = http.request(opt, function(res){
       fin(strToGen(res)) //2938
@@ -132,26 +118,26 @@ class Client {
 
 }
 
+let api = HttpApi().New(8080, 'localhost')
+
 let sv = new Server()
-var cl = new Client(8080, 'localhost')
+var cl = new Client(api)
 let st = new stream.PassThrough()
 
+api.add('getUsers', {
+  method : 'GET',
+  route  : '/users'
+})
+
+api.add('putUsers', {
+  method : 'PUT',
+  route  : '/users'
+})
+
 var sr = http.createServer(function (req, res){
-  if (req.method === 'PUT')
-  sv.putUsers(strToGen(req))
-    .then(function(gen){
-      // console.log('then')
-      res.statusCode = 200
-      str(gen).pipe(res)
-    })
-    .catch(function(e){
-      console.error(e)
-      console.error(e.stack)
-      res.statusCode = 500
-      res.end()
-    })
-  else if (req.method === 'GET')
-  sv.getUsers()
+  let {handle, params} = api.handle(req.method, req.url)
+
+  sv[handle](strToGen(req))
     .then(function(gen){
       // console.log('then')
       res.statusCode = 200
