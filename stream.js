@@ -1,13 +1,16 @@
+import http from 'http'
 import stream from 'stream'
 import split from 'split'
 
-async function putUsers(gen) {
-  for (let i of gen) {
-    console.log('>', String(await i))
+class Server {
+  async putUsers(gen) {
+    for (let i of gen) {
+      console.log(await i)
+    }
   }
 }
 
-let gen = function*(_st){
+function* gen(_st){
   let st = _st.pipe(new split())
 
   var done = false
@@ -15,7 +18,7 @@ let gen = function*(_st){
   var prom
 
   st.on('data', line => {
-    data.push(line)
+    data.push(JSON.parse(line))
 
     if (prom) {
       prom(data.shift())
@@ -39,15 +42,33 @@ let gen = function*(_st){
   }
 }
 
+let sv = new Server()
 let st = new stream.PassThrough()
 
-putUsers(gen(st))
-.catch(function(e){
-  console.error(e)
-  console.error(e.stack)
+http.createServer(function (req, res){
+  sv.putUsers(gen(req))
+    .then(function(ok){
+      res.statusCode = 200
+      res.end()
+    })
+    .catch(function(e){
+      console.error(e)
+      console.error(e.stack)
+      res.statusCode = 500
+      res.end()
+    })
+}).listen(8080, function(){
+  var opt = {
+    port: 8080,
+    headers: {
+      'Transfer-Encoding': 'chunked'
+    }
+  }
+  var req = http.request(opt, function(res){
+    res.pipe(process.stdout)
+  })
+  var int = 0
+  setInterval(function(){
+    req.write(JSON.stringify({id: int++}) + '\n')
+  }, 1500)
 })
-
-var int = 0
-setInterval(function(){
-  st.write(String(int++) + '\n')
-}, 500)
