@@ -5,12 +5,17 @@ import split from 'split'
 class Server {
   async putUsers(gen) {
     for (let i of gen) {
-      console.log(await i)
+      console.log('>', await i)
     }
+    // console.log('k')
+    return function*(){
+      yield {fname: 'ore'}
+      yield {fname: 'rom'}
+    }()
   }
 }
 
-function* gen(_st){
+function* strToGen(_st){
   let st = _st.pipe(new split())
 
   var done = false
@@ -18,7 +23,14 @@ function* gen(_st){
   var prom
 
   st.on('data', line => {
-    data.push(JSON.parse(line))
+    // console.log('data>')
+    try {
+      data.push(JSON.parse(line))
+    }
+    catch(e) {
+      // console.error(e)
+      return
+    }
 
     if (prom) {
       prom(data.shift())
@@ -27,7 +39,9 @@ function* gen(_st){
   })
 
   st.on('end', _ => {
+    // console.log('end>')
     done = true
+    if (prom) prom(null)
   })
 
   while(!done || (data.length > 0)) {
@@ -35,6 +49,7 @@ function* gen(_st){
       yield data.shift()
     }
     else {
+      // console.log('promise>')
       yield new Promise(done => {
         prom = done
       })
@@ -42,14 +57,60 @@ function* gen(_st){
   }
 }
 
+function str(gen) {
+  var str = new stream.PassThrough()
+
+  let next = async function() {
+    for (let i of gen) {
+      str.write(JSON.stringify(await i) + '\n')
+    }
+  }()
+
+  next.then(function(){
+    str.end()
+  })
+
+  return str
+}
+
+class Client {
+  constructor(port, host) {
+    this.port = port
+    this.host = host
+  }
+  putUsers(gen) {
+    let opt = {
+      port: this.port,
+      host: this.host,
+      headers: {
+        'Transfer-Encoding': 'chunked'
+      }
+    }
+
+    var fin
+    let req = http.request(opt, function(res){
+      fin(strToGen(res)) //2938
+    })
+
+    str(gen).pipe(req)
+
+    return new Promise(done => {
+      fin = done
+    })
+  }
+}
+
 let sv = new Server()
+var cl = new Client(8080, 'localhost')
 let st = new stream.PassThrough()
 
-http.createServer(function (req, res){
-  sv.putUsers(gen(req))
-    .then(function(ok){
+var sr = http.createServer(function (req, res){
+  // console.log('req')
+  sv.putUsers(strToGen(req))
+    .then(function(gen){
+      // console.log('then')
       res.statusCode = 200
-      res.end()
+      str(gen).pipe(res)
     })
     .catch(function(e){
       console.error(e)
@@ -57,18 +118,16 @@ http.createServer(function (req, res){
       res.statusCode = 500
       res.end()
     })
-}).listen(8080, function(){
-  var opt = {
-    port: 8080,
-    headers: {
-      'Transfer-Encoding': 'chunked'
+})
+sr.listen(8080, function(){
+  cl.putUsers(function*(){
+    yield {fname: 'bob'}
+    yield {fname: 'kim'}
+    yield {fname: 'joe'}
+  }())
+  .then(async function(gen){
+    for(var u of gen) {
+      console.log('<', await u)
     }
-  }
-  var req = http.request(opt, function(res){
-    res.pipe(process.stdout)
   })
-  var int = 0
-  setInterval(function(){
-    req.write(JSON.stringify({id: int++}) + '\n')
-  }, 1500)
 })
