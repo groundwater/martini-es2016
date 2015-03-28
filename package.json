@@ -11,5 +11,10 @@
   "devDependencies": {
     "browserify": "^9.0.3",
     "es6ify": "^1.6.0"
+  },
+  "dependencies": {
+    "binary-split": "^0.1.2",
+    "lib-http-api": "0.0.2",
+    "split": "^0.3.3"
   }
 }

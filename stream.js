@@ -1,24 +1,34 @@
-import http from 'http'
-import stream from 'stream'
-import split from 'split'
+import http    from 'http'
+import stream  from 'stream'
+import split   from 'split'
 import HttpApi from 'lib-http-api'
 
 class Server {
+  constructor() {
+    this.users = {}
+  }
+
   async putUsers(gen) {
     for (let i of gen) {
-      console.log('>', await i)
+      console.log('putUsers', await i)
     }
-    // console.log('k')
-    return function*(){
-      yield {fname: 'ore'}
-      yield {fname: 'rom'}
-    }()
   }
 
   async getUsers() {
+    let users = this.users
     return function*(){
-      yield {fname: 'ore'}
-      yield {fname: 'rom'}
+      for(user of users) {
+        yield user
+      }
+    }()
+  }
+
+  async getUser(props) {
+    let {uid} = props
+    let user = this.users[uid]
+
+    return function*(){
+      if (user) yield {fname: 'boe'}
     }()
   }
 }
@@ -86,34 +96,42 @@ class Client {
     this.api  = api
   }
 
-  putUsers(gen) {
-    let opt = this.api.request('putUsers', {})
+  _makeRequest(name, props, gen) {
+    let opt = this.api.request(name, props)
 
     var fin
     let req = http.request(opt, function(res){
       fin(strToGen(res)) //2938
     })
 
-    str(gen).pipe(req)
+    if (gen && gen[Symbol.iterator]) {
+      // this is a generator
+      str(gen).pipe(req)
+    }
+    else if (gen) {
+      // this is an object or value
+      req.end(JSON.stringify(gen))
+    }
+    else {
+      // nothing returned
+      req.end()
+    }
 
     return new Promise(done => {
       fin = done
     })
   }
 
+  putUsers(gen) {
+    return this._makeRequest('putUsers', {}, gen)
+  }
+
   getUsers(props) {
-    let opt = this.api.request('putUsers', {})
-    
-    var fin
-    let req = http.request(opt, function(res){
-      fin(strToGen(res)) //2938
-    })
+    return this._makeRequest('getUsers', props)
+  }
 
-    req.end()
-
-    return new Promise(done => {
-      fin = done
-    })
+  getUser(props) {
+    return this._makeRequest('getUser', props)
   }
 
 }
@@ -123,6 +141,11 @@ let api = HttpApi().New(8080, 'localhost')
 let sv = new Server()
 var cl = new Client(api)
 let st = new stream.PassThrough()
+
+api.add('getUser', {
+  method : 'GET',
+  route  : '/user/:uid'
+})
 
 api.add('getUsers', {
   method : 'GET',
@@ -139,9 +162,19 @@ var sr = http.createServer(function (req, res){
 
   sv[handle](strToGen(req))
     .then(function(gen){
-      // console.log('then')
       res.statusCode = 200
-      str(gen).pipe(res)
+      if (gen && gen[Symbol.iterator]) {
+        // this is a generator
+        str(gen).pipe(res)
+      }
+      else if (gen) {
+        // this is an object or value
+        res.end(JSON.stringify(gen))
+      }
+      else {
+        // nothing returned
+        res.end()
+      }
     })
     .catch(function(e){
       console.error(e)
@@ -150,15 +183,24 @@ var sr = http.createServer(function (req, res){
       res.end()
     })
 })
+
 sr.listen(8080, function(){
-  cl.putUsers(function*(){
-    yield {fname: 'bob'}
-    yield {fname: 'kim'}
-    yield {fname: 'joe'}
-  }())
+  cl.getUser({uid: 'bob'})
+  .then(async function(gen){
+    for (let u of gen) {
+      console.log('getUser', await u)
+    }
+  })
+  .then(function(){
+    return cl.putUsers(function*(){
+      yield {fname: 'bob'}
+      yield {fname: 'kim'}
+      yield {fname: 'joe'}
+    }())
+  })
   .then(async function(gen){
     for(var u of gen) {
-      console.log('<', await u)
+      console.log('putUsers', await u)
     }
   })
   .then(ok => {
@@ -167,7 +209,7 @@ sr.listen(8080, function(){
   })
   .then(async function(gen) {
     for (var u of gen) {
-      console.log('+', await u)
+      console.log('getUsers', await u)
     }
   })
 })
